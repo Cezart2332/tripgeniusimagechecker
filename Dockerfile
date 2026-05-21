@@ -13,7 +13,6 @@ COPY scripts ./scripts
 COPY moderation ./moderation
 
 RUN pip install --no-cache-dir -r requirements-build.txt \
-    && python scripts/preload_nudenet.py \
     && python scripts/export_models.py
 
 FROM python:3.12-slim AS runtime
@@ -35,7 +34,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY moderation ./moderation
 COPY main.py ./
 COPY --from=builder /app/models ./models
-COPY --from=builder /root/.NudeNet /root/.NudeNet
 
 EXPOSE 8000
 

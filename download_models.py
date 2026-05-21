@@ -1,4 +1,4 @@
-"""Local dev helper: preload NudeNet + export text ONNX. Docker build uses scripts/ directly."""
+"""Local dev helper: smoke-test NudeNet + export text ONNX. Docker build uses scripts/export_models.py."""
 from nudenet import NudeDetector
 
 from scripts.export_models import main as export_text
