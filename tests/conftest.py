@@ -1,14 +1,20 @@
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import main  # noqa: E402
+
 
 @pytest.fixture
 def client():
     """API tests without loading NudeNet / ONNX models."""
-    with patch("main.init_image_detector"):
-        from main import app
-
-        with TestClient(app) as test_client:
+    with patch.object(main, "init_image_detector"):
+        with TestClient(main.app) as test_client:
             yield test_client
