@@ -5,7 +5,8 @@ import tempfile
 import warnings
 from pathlib import Path
 
-# Quiet known-noisy build-time logs (Docker/CI has no GPU; runtime uses SentencePiece, not HF tokenizer).
+# Quiet noisy build-time logs (Docker/CI has no GPU).
+# Runtime uses SentencePiece, not the Hugging Face tokenizer.
 os.environ.setdefault("PIP_ROOT_USER_ACTION", "ignore")
 os.environ.setdefault("ORT_LOG_LEVEL", "3")  # ERROR
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
