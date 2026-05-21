@@ -1,11 +1,14 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim-bookworm AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update \
+    && apt-get -y full-upgrade \
+    && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements-build.txt ./
@@ -15,7 +18,7 @@ COPY moderation ./moderation
 RUN pip install --no-cache-dir -r requirements-build.txt \
     && python scripts/export_models.py
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
 
@@ -24,8 +27,12 @@ ENV PYTHONUNBUFFERED=1 \
     OMP_NUM_THREADS=2 \
     TEXT_MODEL_DIR=/app/models/text_onnx
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
+# Patch Debian base packages (ncurses, zlib, util-linux, tar, etc.) before adding runtime deps.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update \
+    && apt-get -y full-upgrade \
+    && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -34,6 +41,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY moderation ./moderation
 COPY main.py ./
 COPY --from=builder /app/models ./models
+
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 

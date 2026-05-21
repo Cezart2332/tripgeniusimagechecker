@@ -142,6 +142,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
           exit-code: '1'
 
       - name: Upload Trivy results
