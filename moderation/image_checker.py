@@ -65,7 +65,7 @@ def _is_nsfw_label(label: str) -> bool:
     return "EXPOSED" in label.upper() or label.upper().startswith("EXPOSED_")
 
 
-def check_image_bytes(data: bytes) -> tuple[bool, float]:
+def check_image_bytes(data: bytes) -> tuple[bool, float, list[str], list[str]]:
     if _detector is None:
         raise RuntimeError("Image detector not initialized")
 
@@ -86,14 +86,13 @@ def check_image_bytes(data: bytes) -> tuple[bool, float]:
             nsfw_score = score
             hits.append(f"{label}={score:.3f}")
 
+    all_labels = [
+        f"{item.get('class')}={float(item.get('score', 0)):.3f}" for item in detections
+    ]
+
     if hits:
         logger.info("NudeNet detections (nsfw): %s", ", ".join(hits))
-    elif detections:
-        logger.debug(
-            "NudeNet detections below nsfw filter: %s",
-            ", ".join(
-                f"{item.get('class')}={float(item.get('score', 0)):.3f}" for item in detections
-            ),
-        )
+    elif all_labels:
+        logger.info("NudeNet detections (non-nsfw labels): %s", ", ".join(all_labels))
 
-    return nsfw_score >= NSFW_THRESHOLD, round(nsfw_score, 4)
+    return nsfw_score >= NSFW_THRESHOLD, round(nsfw_score, 4), hits, all_labels

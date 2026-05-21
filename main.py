@@ -1,8 +1,10 @@
 import asyncio
+import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from moderation import (
     check_image_bytes,
@@ -12,19 +14,39 @@ from moderation import (
     is_text_ready,
     text_load_error,
 )
+from moderation.audit import log_text_preview_enabled, moderation_audit
 from moderation.config import INFERENCE_TIMEOUT_SECONDS, MAX_UPLOAD_BYTES
 
 _inference_semaphore = asyncio.Semaphore(1)
 _queue_depth = 0
 
 
+def _configure_logging() -> None:
+    level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, level, logging.INFO),
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+    logging.getLogger("moderation.audit").setLevel(logging.INFO)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _configure_logging()
     init_image_detector()
+    moderation_audit(
+        "startup",
+        image_ready=is_image_ready(),
+        text_ready=is_text_ready(),
+        text_error=text_load_error(),
+    )
     yield
 
 
 app = FastAPI(lifespan=lifespan)
+logger = logging.getLogger(__name__)
 
 
 class TextRequest(BaseModel):
@@ -34,11 +56,15 @@ class TextRequest(BaseModel):
 class ImageResult(BaseModel):
     is_nsfw: bool
     nsfw_score: float
+    decision: str = Field(description='"block" or "allow"')
+    debug: dict | None = None
 
 
 class TextResult(BaseModel):
     is_toxic: bool
     scores: dict[str, float]
+    decision: str = Field(description='"block" or "allow"')
+    debug: dict | None = None
 
 
 class HealthResult(BaseModel):
@@ -83,13 +109,37 @@ async def image_check(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File too large")
 
     try:
-        is_nsfw, nsfw_score = await _run_with_semaphore(check_image_bytes, data)
+        is_nsfw, nsfw_score, nsfw_hits, all_labels = await _run_with_semaphore(
+            check_image_bytes, data
+        )
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Image check timed out")
     except Exception as exc:
+        logger.exception("image-check failed")
         raise HTTPException(status_code=400, detail=f"Error processing image: {exc}")
 
-    return ImageResult(is_nsfw=is_nsfw, nsfw_score=nsfw_score)
+    decision = "block" if is_nsfw else "allow"
+    debug = {
+        "bytes": len(data),
+        "content_type": file.content_type,
+        "nsfw_hits": nsfw_hits,
+        "all_detections": all_labels,
+    }
+    moderation_audit(
+        "image-check",
+        decision=decision,
+        is_nsfw=is_nsfw,
+        nsfw_score=nsfw_score,
+        bytes=len(data),
+        nsfw_hits=nsfw_hits or "none",
+        all_detections=all_labels or "none",
+    )
+    return ImageResult(
+        is_nsfw=is_nsfw,
+        nsfw_score=nsfw_score,
+        decision=decision,
+        debug=debug,
+    )
 
 
 @app.post("/text-check", response_model=TextResult)
@@ -101,6 +151,28 @@ async def text_check(request: TextRequest):
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Text check timed out")
     except Exception as exc:
+        logger.exception("text-check failed")
         raise HTTPException(status_code=503, detail=f"Text model unavailable: {exc}")
 
-    return TextResult(is_toxic=is_toxic, scores=scores)
+    decision = "block" if is_toxic else "allow"
+    debug: dict = {"scores": scores}
+    audit_fields: dict = {
+        "decision": decision,
+        "is_toxic": is_toxic,
+        "scores": scores,
+        "text_len": len(request.text),
+    }
+    if log_text_preview_enabled():
+        from moderation.audit import _preview
+
+        preview = _preview(request.text)
+        debug["preview"] = preview
+        audit_fields["preview"] = preview
+
+    moderation_audit("text-check", **audit_fields)
+    return TextResult(
+        is_toxic=is_toxic,
+        scores=scores,
+        decision=decision,
+        debug=debug,
+    )

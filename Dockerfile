@@ -32,7 +32,9 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     TOKENIZERS_PARALLELISM=false \
     OMP_NUM_THREADS=2 \
-    TEXT_MODEL_DIR=/app/models/text_onnx
+    TEXT_MODEL_DIR=/app/models/text_onnx \
+    LOG_LEVEL=INFO \
+    MODERATION_LOG_PREVIEW=true
 
 # Patch Debian base packages (ncurses, zlib, util-linux, tar, etc.) before adding runtime deps.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -59,4 +61,4 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "info"]

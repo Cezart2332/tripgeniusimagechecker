@@ -25,10 +25,11 @@ def test_check_image_bytes_blocks_high_exposed_score(mock_detector: MagicMock):
         {"class": "FEMALE_BREAST_EXPOSED", "score": 0.72, "box": [0, 0, 10, 10]},
     ]
 
-    is_nsfw, score = check_image_bytes(_jpeg_bytes_for_test())
+    is_nsfw, score, hits, _all = check_image_bytes(_jpeg_bytes_for_test())
 
     assert is_nsfw is True
     assert score == 0.72
+    assert hits
     mock_detector.detect.assert_called_once()
     assert isinstance(mock_detector.detect.call_args[0][0], (bytes, bytearray))
 
@@ -39,10 +40,11 @@ def test_check_image_bytes_allows_face_only(mock_detector: MagicMock):
         {"class": "FACE_FEMALE", "score": 0.9, "box": [0, 0, 10, 10]},
     ]
 
-    is_nsfw, score = check_image_bytes(_jpeg_bytes_for_test())
+    is_nsfw, score, hits, _all = check_image_bytes(_jpeg_bytes_for_test())
 
     assert is_nsfw is False
     assert score == 0.0
+    assert hits == []
 
 
 @patch("moderation.image_checker._detector", None)

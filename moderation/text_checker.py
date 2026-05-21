@@ -19,6 +19,7 @@ from moderation.config import (
     TOXIC_LABELS,
     TOXIC_THRESHOLD,
 )
+from moderation.profanity import contains_profanity
 
 _sp_processor: spm.SentencePieceProcessor | None = None
 _token_config: dict[str, Any] | None = None
@@ -183,6 +184,9 @@ def check_text(text: str) -> tuple[bool, dict[str, float]]:
     normalized = _normalize_text(text)
     if not normalized:
         raise ValueError("Text is required")
+
+    if contains_profanity(normalized):
+        return True, {"blocklist": 1.0}
 
     truncated = normalized[:TEXT_MAX_CHARS]
     _ensure_text_session()
