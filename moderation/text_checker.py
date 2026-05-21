@@ -11,7 +11,14 @@ import numpy as np
 import onnxruntime as ort
 import sentencepiece as spm
 
-from moderation.config import TEXT_MAX_CHARS, TEXT_MODEL_DIR, TOXIC_LABELS, TOXIC_THRESHOLD
+from moderation.config import (
+    SHORT_TEXT_LEN,
+    SHORT_TEXT_TOXIC_THRESHOLD,
+    TEXT_MAX_CHARS,
+    TEXT_MODEL_DIR,
+    TOXIC_LABELS,
+    TOXIC_THRESHOLD,
+)
 
 _sp_processor: spm.SentencePieceProcessor | None = None
 _token_config: dict[str, Any] | None = None
@@ -123,6 +130,37 @@ def _ensure_text_session() -> None:
             raise
 
 
+def _scores_from_logits(logits: np.ndarray, id2label: dict[int, str]) -> dict[str, float]:
+    """Map model outputs to label probabilities.
+
+    unitary/multilingual-toxic-xlm-roberta exports a single toxic logit (sigmoid).
+    Softmax on one logit is always 1.0 and incorrectly flags every message.
+    """
+    values = np.asarray(logits, dtype=np.float64).flatten()
+
+    if values.size == 0:
+        return {}
+
+    if values.size == 1:
+        label = id2label.get(0, "toxic")
+        prob = float(1.0 / (1.0 + np.exp(-values[0])))
+        return {label: round(prob, 4)}
+
+    # Multi-label heads (e.g. Detoxify): independent sigmoid per logit.
+    if len(id2label) > 1 and values.size == len(id2label):
+        probs = 1.0 / (1.0 + np.exp(-values))
+        return {
+            id2label.get(i, str(i)): round(float(probs[i]), 4) for i in range(values.size)
+        }
+
+    # Mutually exclusive multi-class fallback.
+    exp = np.exp(values - np.max(values))
+    probs = exp / exp.sum()
+    return {
+        id2label.get(i, str(i)): round(float(probs[i]), 4) for i in range(values.size)
+    }
+
+
 def _build_feeds(input_ids: list[int], attention_mask: list[int]) -> dict[str, Any]:
     assert _session is not None
     ids = np.array([input_ids], dtype=np.int64)
@@ -153,13 +191,13 @@ def check_text(text: str) -> tuple[bool, dict[str, float]]:
 
     input_ids, attention_mask = _encode_text(truncated, TEXT_MAX_CHARS)
     logits = _session.run(None, _build_feeds(input_ids, attention_mask))[0][0]
-    exp = np.exp(logits - np.max(logits))
-    probs = exp / exp.sum()
+    label_map = _id2label if _id2label else {0: "toxic"}
+    scores = _scores_from_logits(logits, label_map)
 
-    scores: dict[str, float] = {}
-    for idx, prob in enumerate(probs):
-        label = _id2label.get(idx, str(idx)) if _id2label else str(idx)
-        scores[label] = round(float(prob), 4)
-
-    is_toxic = any(scores.get(label, 0.0) > TOXIC_THRESHOLD for label in TOXIC_LABELS)
+    threshold = (
+        SHORT_TEXT_TOXIC_THRESHOLD
+        if len(truncated) < SHORT_TEXT_LEN
+        else TOXIC_THRESHOLD
+    )
+    is_toxic = any(scores.get(label, 0.0) > threshold for label in TOXIC_LABELS)
     return is_toxic, scores
