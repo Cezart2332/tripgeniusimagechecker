@@ -5,7 +5,6 @@ import logging
 import os
 from typing import Any
 
-import numpy as np
 from PIL import Image
 
 from moderation.config import IMAGE_MAX_EDGE, NSFW_LABELS, NSFW_THRESHOLD

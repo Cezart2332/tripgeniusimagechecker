@@ -54,7 +54,11 @@ def test_init_loads_custom_model_path(mock_nude_cls: MagicMock, tmp_path):
     import moderation.image_checker as module
 
     module._detector = None
-    with patch.dict("os.environ", {"NUDENET_MODEL_PATH": str(model_file), "NUDENET_INFERENCE_SIZE": "640"}):
+    env = {
+        "NUDENET_MODEL_PATH": str(model_file),
+        "NUDENET_INFERENCE_SIZE": "640",
+    }
+    with patch.dict("os.environ", env):
         init_image_detector()
 
     mock_nude_cls.assert_called_once_with(
