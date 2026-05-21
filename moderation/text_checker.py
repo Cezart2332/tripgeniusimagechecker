@@ -9,12 +9,13 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
-from tokenizers import Tokenizer
+import sentencepiece as spm
 
 from moderation.config import TEXT_MAX_CHARS, TEXT_MODEL_DIR, TOXIC_LABELS, TOXIC_THRESHOLD
 
+_sp_processor: spm.SentencePieceProcessor | None = None
+_token_config: dict[str, Any] | None = None
 _session: ort.InferenceSession | None = None
-_tokenizer: Tokenizer | None = None
 _id2label: dict[int, str] | None = None
 _load_lock = threading.Lock()
 _load_error: str | None = None
@@ -57,8 +58,38 @@ def _load_id2label(model_dir: Path) -> dict[int, str]:
     return {int(key): str(value) for key, value in raw.items()}
 
 
+def _load_tokenizer_config(model_dir: Path) -> dict[str, Any]:
+    config_path = model_dir / "tokenizer_config.json"
+    if not config_path.exists():
+        return {"bos_token_id": 0, "pad_token_id": 1, "eos_token_id": 2}
+    with config_path.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _encode_text(text: str, max_length: int) -> tuple[list[int], list[int]]:
+    assert _sp_processor is not None
+    assert _token_config is not None
+
+    bos_id = int(_token_config.get("bos_token_id", 0))
+    pad_id = int(_token_config.get("pad_token_id", 1))
+    eos_id = int(_token_config.get("eos_token_id", 2))
+
+    body_ids = _sp_processor.encode(text, out_type=int)
+    max_body = max(1, max_length - 2)
+    body_ids = body_ids[:max_body]
+
+    input_ids = [bos_id, *body_ids, eos_id]
+    attention_mask = [1] * len(input_ids)
+
+    while len(input_ids) < max_length:
+        input_ids.append(pad_id)
+        attention_mask.append(0)
+
+    return input_ids, attention_mask
+
+
 def _ensure_text_session() -> None:
-    global _session, _tokenizer, _id2label, _load_error
+    global _sp_processor, _token_config, _session, _id2label, _load_error
     if _session is not None:
         return
     with _load_lock:
@@ -71,13 +102,16 @@ def _ensure_text_session() -> None:
                     "Run scripts/export_models.py first."
                 )
 
-            tokenizer_path = TEXT_MODEL_DIR / "tokenizer.json"
-            if not tokenizer_path.exists():
-                raise FileNotFoundError(f"tokenizer.json not found at {tokenizer_path}")
+            spm_path = TEXT_MODEL_DIR / "sentencepiece.bpe.model"
+            if not spm_path.exists():
+                raise FileNotFoundError(f"sentencepiece.bpe.model not found at {spm_path}")
+
+            processor = spm.SentencePieceProcessor()
+            processor.load(str(spm_path))
 
             onnx_path = _resolve_onnx_path(TEXT_MODEL_DIR)
-            _tokenizer = Tokenizer.from_file(str(tokenizer_path))
-            _tokenizer.enable_truncation(max_length=TEXT_MAX_CHARS)
+            _sp_processor = processor
+            _token_config = _load_tokenizer_config(TEXT_MODEL_DIR)
             _session = ort.InferenceSession(
                 str(onnx_path),
                 providers=["CPUExecutionProvider"],
@@ -89,19 +123,19 @@ def _ensure_text_session() -> None:
             raise
 
 
-def _build_feeds(encoded) -> dict[str, Any]:
+def _build_feeds(input_ids: list[int], attention_mask: list[int]) -> dict[str, Any]:
     assert _session is not None
-    input_ids = np.array([encoded.ids], dtype=np.int64)
-    attention_mask = np.array([encoded.attention_mask], dtype=np.int64)
-    token_type_ids = np.zeros_like(input_ids)
+    ids = np.array([input_ids], dtype=np.int64)
+    mask = np.array([attention_mask], dtype=np.int64)
+    token_type_ids = np.zeros_like(ids)
 
     feeds: dict[str, Any] = {}
     for model_input in _session.get_inputs():
         name = model_input.name
         if name == "input_ids":
-            feeds[name] = input_ids
+            feeds[name] = ids
         elif name == "attention_mask":
-            feeds[name] = attention_mask
+            feeds[name] = mask
         elif name == "token_type_ids":
             feeds[name] = token_type_ids
     return feeds
@@ -115,11 +149,10 @@ def check_text(text: str) -> tuple[bool, dict[str, float]]:
     truncated = normalized[:TEXT_MAX_CHARS]
     _ensure_text_session()
 
-    assert _tokenizer is not None
     assert _session is not None
 
-    encoded = _tokenizer.encode(truncated)
-    logits = _session.run(None, _build_feeds(encoded))[0][0]
+    input_ids, attention_mask = _encode_text(truncated, TEXT_MAX_CHARS)
+    logits = _session.run(None, _build_feeds(input_ids, attention_mask))[0][0]
     exp = np.exp(logits - np.max(logits))
     probs = exp / exp.sum()
 

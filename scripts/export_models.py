@@ -3,36 +3,27 @@ import shutil
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
-from transformers import AutoTokenizer
 
 MODEL_ID = "unitary/multilingual-toxic-xlm-roberta"
 OUT_DIR = Path(__file__).resolve().parent.parent / "models" / "text_onnx"
 
-TOKENIZER_FILES = (
-    "tokenizer.json",
+HUB_FILES = (
+    "sentencepiece.bpe.model",
     "tokenizer_config.json",
     "special_tokens_map.json",
     "config.json",
 )
 
 
-def export_tokenizer(out_dir: Path) -> None:
-    for filename in TOKENIZER_FILES:
-        try:
-            downloaded = hf_hub_download(repo_id=MODEL_ID, filename=filename)
-            shutil.copy2(downloaded, out_dir / filename)
-            print(f"Copied {filename}")
-        except Exception as exc:
-            print(f"Could not download {filename}: {exc}")
+def export_tokenizer_assets(out_dir: Path) -> None:
+    for filename in HUB_FILES:
+        downloaded = hf_hub_download(repo_id=MODEL_ID, filename=filename)
+        shutil.copy2(downloaded, out_dir / filename)
+        print(f"Copied {filename}")
 
-    if not (out_dir / "tokenizer.json").exists():
-        print("Falling back to slow tokenizer (use_fast=False) ...")
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, use_fast=False)
-        tokenizer.save_pretrained(out_dir)
-
-    if not (out_dir / "tokenizer.json").exists():
+    if not (out_dir / "sentencepiece.bpe.model").exists():
         raise RuntimeError(
-            f"tokenizer.json missing in {out_dir}. Cannot run text moderation at runtime."
+            f"sentencepiece.bpe.model missing in {out_dir}. Cannot run text moderation."
         )
 
 
@@ -58,11 +49,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Exporting {MODEL_ID} to {OUT_DIR} ...")
 
-    export_tokenizer(OUT_DIR)
+    export_tokenizer_assets(OUT_DIR)
     export_onnx(OUT_DIR)
 
-    onnx_path = OUT_DIR / "model.onnx"
-    if not onnx_path.exists() and not (OUT_DIR / "model_quantized.onnx").exists():
+    if not (OUT_DIR / "model.onnx").exists() and not (OUT_DIR / "model_quantized.onnx").exists():
         raise RuntimeError(f"No ONNX model found in {OUT_DIR}")
 
     print("Text model export complete.")
