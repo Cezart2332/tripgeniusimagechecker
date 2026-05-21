@@ -15,7 +15,8 @@ COPY requirements.txt requirements-build.txt ./
 COPY scripts ./scripts
 COPY moderation ./moderation
 
-RUN pip install --no-cache-dir -r requirements-build.txt \
+RUN python -m pip install --upgrade 'pip>=25.3' \
+    && python -m pip install --no-cache-dir -r requirements-build.txt \
     && python scripts/export_models.py
 
 FROM python:3.12-slim-bookworm AS runtime
@@ -36,7 +37,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade 'pip>=25.3' \
+    && python -m pip install --no-cache-dir -r requirements.txt \
+    && python -m pip uninstall -y pip
 
 COPY moderation ./moderation
 COPY main.py ./
