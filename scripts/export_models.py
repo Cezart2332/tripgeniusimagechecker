@@ -12,9 +12,11 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from huggingface_hub import hf_hub_download
 
+# Default: single multilingual toxic logit. Multi-label override:
+# TEXT_MODEL_HF_ID=oleksiizirka/xlm-roberta-toxicity-classifier
 TEXT_MODEL_ID = os.getenv(
     "TEXT_MODEL_HF_ID",
-    "oleksiizirka/xlm-roberta-toxicity-classifier",
+    "unitary/multilingual-toxic-xlm-roberta",
 )
 IMAGE_MODEL_ID = os.getenv(
     "IMAGE_MODEL_HF_ID",

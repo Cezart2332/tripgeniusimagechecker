@@ -2,7 +2,7 @@
 
 FROM python:3.12-slim-bookworm AS builder
 
-ARG TEXT_MODEL_HF_ID=oleksiizirka/xlm-roberta-toxicity-classifier
+ARG TEXT_MODEL_HF_ID=unitary/multilingual-toxic-xlm-roberta
 ARG IMAGE_MODEL_HF_ID=Falconsai/nsfw_image_detection
 ENV TEXT_MODEL_HF_ID=${TEXT_MODEL_HF_ID}
 ENV IMAGE_MODEL_HF_ID=${IMAGE_MODEL_HF_ID}

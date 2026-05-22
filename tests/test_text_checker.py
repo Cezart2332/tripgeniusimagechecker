@@ -1,6 +1,8 @@
+from unittest.mock import patch
+
 import numpy as np
 
-from moderation.text_checker import _scores_from_logits
+from moderation.text_checker import _scores_from_logits, check_text
 
 
 def test_single_logit_low_score_is_not_always_one():
@@ -38,3 +40,11 @@ def test_multilabel_seven_heads():
     scores = _scores_from_logits(logits, labels)
     assert scores["obscene"] > 0.9
     assert scores["none"] < 0.1
+
+
+@patch("moderation.text_checker._ensure_text_session")
+def test_check_text_blocklist_skips_model(mock_init):
+    is_toxic, scores = check_text("sugi pula")
+    assert is_toxic is True
+    assert scores == {"blocklist": 1.0}
+    mock_init.assert_not_called()

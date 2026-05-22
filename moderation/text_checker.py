@@ -21,6 +21,7 @@ from moderation.config import (
     TOXIC_LABELS,
     TOXIC_THRESHOLD,
 )
+from moderation.profanity import contains_profanity
 
 _tokenizer: Tokenizer | None = None
 _session: ort.InferenceSession | None = None
@@ -179,6 +180,9 @@ def check_text(text: str) -> tuple[bool, dict[str, float]]:
     normalized = _normalize_text(text)
     if not normalized:
         raise ValueError("Text is required")
+
+    if contains_profanity(normalized):
+        return True, {"blocklist": 1.0}
 
     truncated = normalized[:TEXT_MAX_CHARS]
     _ensure_text_session()
