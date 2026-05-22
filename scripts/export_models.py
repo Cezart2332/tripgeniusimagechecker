@@ -156,7 +156,9 @@ def main() -> None:
     print(f"[text] Exporting {TEXT_MODEL_ID} → {TEXT_OUT_DIR} ...")
     export_text_onnx(TEXT_OUT_DIR)
     export_tokenizer_assets(TEXT_OUT_DIR)
-    if not (TEXT_OUT_DIR / "model.onnx").exists() and not (TEXT_OUT_DIR / "model_quantized.onnx").exists():
+    text_onnx = TEXT_OUT_DIR / "model.onnx"
+    text_quantized = TEXT_OUT_DIR / "model_quantized.onnx"
+    if not text_onnx.exists() and not text_quantized.exists():
         raise RuntimeError(f"No text ONNX model found in {TEXT_OUT_DIR}")
     print("[text] Export complete.\n")
 
@@ -164,7 +166,9 @@ def main() -> None:
     IMAGE_OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"[image] Exporting {IMAGE_MODEL_ID} → {IMAGE_OUT_DIR} ...")
     export_image_onnx(IMAGE_OUT_DIR)
-    if not (IMAGE_OUT_DIR / "model.onnx").exists() and not (IMAGE_OUT_DIR / "model_quantized.onnx").exists():
+    image_onnx = IMAGE_OUT_DIR / "model.onnx"
+    image_quantized = IMAGE_OUT_DIR / "model_quantized.onnx"
+    if not image_onnx.exists() and not image_quantized.exists():
         raise RuntimeError(f"No image ONNX model found in {IMAGE_OUT_DIR}")
     print("[image] Export complete.")
 

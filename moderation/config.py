@@ -3,7 +3,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Falconsai outputs calibrated softmax probabilities (0.0–1.0); 0.5 is the natural decision boundary.
+# Falconsai softmax probabilities (0.0–1.0); 0.5 is the natural decision boundary.
 NSFW_THRESHOLD = float(os.getenv("NSFW_THRESHOLD", "0.5"))
 TOXIC_THRESHOLD = float(os.getenv("TOXIC_THRESHOLD", "0.72"))
 SHORT_TEXT_LEN = int(os.getenv("SHORT_TEXT_LEN", "16"))
