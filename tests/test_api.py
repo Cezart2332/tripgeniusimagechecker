@@ -12,7 +12,7 @@ def test_health_without_models(client: TestClient):
     assert body["text_ready"] is False
 
 
-@patch("main.check_image_bytes", return_value=(False, 0.12, [], []))
+@patch("main.check_image_bytes", return_value=(False, 0.12))
 def test_image_check_pass(_mock_check, client: TestClient):
     response = client.post(
         "/image-check",
@@ -24,7 +24,7 @@ def test_image_check_pass(_mock_check, client: TestClient):
     assert body["nsfw_score"] == 0.12
 
 
-@patch("main.check_image_bytes", return_value=(True, 0.91, ["FEMALE_BREAST_EXPOSED=0.91"], []))
+@patch("main.check_image_bytes", return_value=(True, 0.91))
 def test_image_check_block(_mock_check, client: TestClient):
     response = client.post(
         "/image-check",

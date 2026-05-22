@@ -116,9 +116,7 @@ async def image_check(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File too large")
 
     try:
-        is_nsfw, nsfw_score, nsfw_hits, all_labels = await _run_with_semaphore(
-            check_image_bytes, data
-        )
+        is_nsfw, nsfw_score = await _run_with_semaphore(check_image_bytes, data)
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Image check timed out")
     except Exception as exc:
@@ -129,8 +127,7 @@ async def image_check(file: UploadFile = File(...)):
     debug = {
         "bytes": len(data),
         "content_type": file.content_type,
-        "nsfw_hits": nsfw_hits,
-        "all_detections": all_labels,
+        "nsfw_score": nsfw_score,
     }
     moderation_audit(
         "image-check",
@@ -138,8 +135,6 @@ async def image_check(file: UploadFile = File(...)):
         is_nsfw=is_nsfw,
         nsfw_score=nsfw_score,
         bytes=len(data),
-        nsfw_hits=nsfw_hits or "none",
-        all_detections=all_labels or "none",
     )
     return ImageResult(
         is_nsfw=is_nsfw,

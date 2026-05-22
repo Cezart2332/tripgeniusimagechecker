@@ -14,7 +14,7 @@ import main  # noqa: E402
 
 @pytest.fixture
 def client():
-    """API tests without loading NudeNet / ONNX models."""
+    """API tests without loading ONNX models."""
     with patch.object(main, "init_image_detector"), patch.object(main, "init_text_model"):
         with TestClient(main.app) as test_client:
             yield test_client

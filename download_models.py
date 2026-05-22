@@ -1,10 +1,6 @@
-"""Local dev helper: smoke-test NudeNet + export text ONNX. Docker build uses scripts/export_models.py."""
-from nudenet import NudeDetector
-
-from scripts.export_models import main as export_text
+"""Local dev helper: export both text + image ONNX models. Docker build uses scripts/export_models.py."""
+from scripts.export_models import main as export_all
 
 if __name__ == "__main__":
-    print("Preloading NudeNet ...")
-    NudeDetector()
-    export_text()
+    export_all()
     print("All models ready.")

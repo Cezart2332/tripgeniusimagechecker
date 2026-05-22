@@ -3,7 +3,9 @@
 FROM python:3.12-slim-bookworm AS builder
 
 ARG TEXT_MODEL_HF_ID=oleksiizirka/xlm-roberta-toxicity-classifier
+ARG IMAGE_MODEL_HF_ID=Falconsai/nsfw_image_detection
 ENV TEXT_MODEL_HF_ID=${TEXT_MODEL_HF_ID}
+ENV IMAGE_MODEL_HF_ID=${IMAGE_MODEL_HF_ID}
 
 ENV PIP_ROOT_USER_ACTION=ignore \
     PIP_NO_CACHE_DIR=1 \
@@ -36,6 +38,7 @@ ENV PYTHONUNBUFFERED=1 \
     TOKENIZERS_PARALLELISM=false \
     OMP_NUM_THREADS=2 \
     TEXT_MODEL_DIR=/app/models/text_onnx \
+    IMAGE_MODEL_DIR=/app/models/image_onnx \
     LOG_LEVEL=INFO \
     MODERATION_LOG_PREVIEW=true
 
