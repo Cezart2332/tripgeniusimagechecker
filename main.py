@@ -10,6 +10,7 @@ from moderation import (
     check_image_bytes,
     check_text,
     init_image_detector,
+    init_text_model,
     is_image_ready,
     is_text_ready,
     text_load_error,
@@ -35,13 +36,19 @@ def _configure_logging() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _configure_logging()
-    init_image_detector()
+    logger.info("Loading moderation models (image + text ONNX) ...")
+    await asyncio.gather(
+        asyncio.to_thread(init_image_detector),
+        asyncio.to_thread(init_text_model),
+    )
     moderation_audit(
         "startup",
         image_ready=is_image_ready(),
         text_ready=is_text_ready(),
         text_error=text_load_error(),
     )
+    if not is_text_ready():
+        logger.error("Text model failed to load: %s", text_load_error())
     yield
 
 

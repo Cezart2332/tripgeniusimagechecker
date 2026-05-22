@@ -85,6 +85,11 @@ def _encode_text(text: str) -> tuple[list[int], list[int]]:
     return encoded.ids, encoded.attention_mask
 
 
+def init_text_model() -> None:
+    """Load ONNX + tokenizer at startup so the first /text-check is not slow."""
+    _ensure_text_session()
+
+
 def _ensure_text_session() -> None:
     global _tokenizer, _session, _id2label, _load_error
     if _session is not None and _tokenizer is not None:
