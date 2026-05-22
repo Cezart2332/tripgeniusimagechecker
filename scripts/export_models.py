@@ -14,7 +14,12 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from huggingface_hub import hf_hub_download
 
-MODEL_ID = "unitary/multilingual-toxic-xlm-roberta"
+# Multi-label Jigsaw-style heads (toxic, obscene, insult, …). Override to keep the old
+# single-logit model: TEXT_MODEL_HF_ID=unitary/multilingual-toxic-xlm-roberta
+MODEL_ID = os.getenv(
+    "TEXT_MODEL_HF_ID",
+    "oleksiizirka/xlm-roberta-toxicity-classifier",
+)
 OUT_DIR = Path(__file__).resolve().parent.parent / "models" / "text_onnx"
 
 # Hub assets required by slow XLMRobertaTokenizer (no vocab.txt on this repo).

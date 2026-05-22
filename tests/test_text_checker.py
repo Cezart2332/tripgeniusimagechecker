@@ -21,3 +21,20 @@ def test_multilabel_sigmoid_per_head():
     assert scores["toxic"] < 0.1
     assert scores["severe_toxic"] > 0.9
     assert scores["insult"] < 0.2
+
+
+def test_multilabel_seven_heads():
+    """oleksiizirka-style: toxic … identity_hate + none."""
+    logits = np.array([-3.0, -3.0, 4.0, -3.0, -3.0, -3.0, -3.0])
+    labels = {
+        0: "toxic",
+        1: "severe_toxic",
+        2: "obscene",
+        3: "threat",
+        4: "insult",
+        5: "identity_hate",
+        6: "none",
+    }
+    scores = _scores_from_logits(logits, labels)
+    assert scores["obscene"] > 0.9
+    assert scores["none"] < 0.1

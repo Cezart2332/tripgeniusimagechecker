@@ -2,6 +2,9 @@
 
 FROM python:3.12-slim-bookworm AS builder
 
+ARG TEXT_MODEL_HF_ID=oleksiizirka/xlm-roberta-toxicity-classifier
+ENV TEXT_MODEL_HF_ID=${TEXT_MODEL_HF_ID}
+
 ENV PIP_ROOT_USER_ACTION=ignore \
     PIP_NO_CACHE_DIR=1 \
     ORT_LOG_LEVEL=3 \

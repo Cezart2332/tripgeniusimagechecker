@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import unicodedata
@@ -26,6 +27,7 @@ _session: ort.InferenceSession | None = None
 _id2label: dict[int, str] | None = None
 _load_lock = threading.Lock()
 _load_error: str | None = None
+_logger = logging.getLogger(__name__)
 
 _ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\ufeff]")
 
@@ -112,6 +114,13 @@ def _ensure_text_session() -> None:
             )
             _id2label = _load_id2label(TEXT_MODEL_DIR)
             _load_error = None
+            model_labels = list(_id2label.values()) if _id2label else ["toxic"]
+            active = [label for label in TOXIC_LABELS if label in model_labels]
+            _logger.info(
+                "Text model labels=%s; blocking on=%s",
+                model_labels,
+                active or model_labels,
+            )
         except Exception as exc:
             _load_error = str(exc)
             raise
@@ -186,5 +195,10 @@ def check_text(text: str) -> tuple[bool, dict[str, float]]:
         if len(truncated) < SHORT_TEXT_LEN
         else TOXIC_THRESHOLD
     )
-    is_toxic = any(scores.get(label, 0.0) > threshold for label in TOXIC_LABELS)
+    # Only evaluate labels the model actually returned (single-label models expose "toxic" only).
+    block_labels = [label for label in TOXIC_LABELS if label in scores]
+    if not block_labels:
+        block_labels = [label for label in scores if label != "none"]
+
+    is_toxic = any(scores[label] > threshold for label in block_labels)
     return is_toxic, scores

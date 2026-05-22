@@ -15,8 +15,25 @@ TEXT_MODEL_DIR = Path(os.getenv("TEXT_MODEL_DIR", str(BASE_DIR / "models" / "tex
 IMAGE_MAX_EDGE = int(os.getenv("IMAGE_MAX_EDGE", "640"))
 INFERENCE_TIMEOUT_SECONDS = float(os.getenv("INFERENCE_TIMEOUT_SECONDS", "10"))
 
-# Block only core toxicity; insult/obscene fire often on benign short multilingual text.
-TOXIC_LABELS = ("toxic", "severe_toxic")
+# Labels that can trigger a block (any score above threshold). "none" is never included.
+# Override: TOXIC_LABELS=toxic,obscene,insult
+_DEFAULT_TOXIC_LABELS = (
+    "toxic",
+    "severe_toxic",
+    "obscene",
+    "threat",
+    "insult",
+    "identity_hate",
+)
+_toxic_labels_env = os.getenv("TOXIC_LABELS", "").strip()
+if _toxic_labels_env:
+    TOXIC_LABELS = tuple(
+        label.strip()
+        for label in _toxic_labels_env.split(",")
+        if label.strip() and label.strip().lower() != "none"
+    )
+else:
+    TOXIC_LABELS = _DEFAULT_TOXIC_LABELS
 
 # NudeNet / detector labels treated as NSFW (any match above threshold).
 NSFW_LABELS = frozenset(
