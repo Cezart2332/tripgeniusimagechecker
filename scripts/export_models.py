@@ -6,7 +6,7 @@ import warnings
 from pathlib import Path
 
 # Quiet noisy build-time logs (Docker/CI has no GPU).
-# Runtime uses SentencePiece, not the Hugging Face tokenizer.
+# Runtime uses tokenizers (tokenizer.json); export uses slow XLMRobertaTokenizer only.
 os.environ.setdefault("PIP_ROOT_USER_ACTION", "ignore")
 os.environ.setdefault("ORT_LOG_LEVEL", "3")  # ERROR
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
@@ -17,8 +17,12 @@ from huggingface_hub import hf_hub_download
 MODEL_ID = "unitary/multilingual-toxic-xlm-roberta"
 OUT_DIR = Path(__file__).resolve().parent.parent / "models" / "text_onnx"
 
-HUB_FILES = (
+# Hub assets required by slow XLMRobertaTokenizer (no vocab.txt on this repo).
+TOKENIZER_HUB_FILES = (
     "config.json",
+    "sentencepiece.bpe.model",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
 )
 
 ONNX_ARTIFACTS = (
@@ -29,18 +33,27 @@ ONNX_ARTIFACTS = (
 
 
 def export_tokenizer_assets(out_dir: Path) -> None:
-    from transformers import AutoTokenizer
+    from transformers import XLMRobertaTokenizer
 
-    for filename in HUB_FILES:
+    for filename in TOKENIZER_HUB_FILES:
         downloaded = hf_hub_download(repo_id=MODEL_ID, filename=filename)
         shutil.copy2(downloaded, out_dir / filename)
         print(f"Copied {filename}")
 
-    print("Exporting tokenizer.json (must match HF XLM-RoBERTa encoding) ...")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    # AutoTokenizer defaults to the fast tokenizer, which crashes on this repo
+    # (vocab_file is None → convert_slow_tokenizer AttributeError in Docker CI).
+    print("Exporting tokenizer.json via slow XLMRobertaTokenizer ...")
+    tokenizer = XLMRobertaTokenizer.from_pretrained(str(out_dir))
     tokenizer.save_pretrained(out_dir)
 
-    if not (out_dir / "tokenizer.json").exists():
+    tokenizer_json = out_dir / "tokenizer.json"
+    if not tokenizer_json.exists():
+        from transformers.convert_slow_tokenizer import XLMRobertaConverter
+
+        print("save_pretrained did not emit tokenizer.json; converting slow tokenizer ...")
+        XLMRobertaConverter(tokenizer).converted().save(str(tokenizer_json))
+
+    if not tokenizer_json.exists():
         raise RuntimeError(f"tokenizer.json missing in {out_dir}. Cannot run text moderation.")
 
 
