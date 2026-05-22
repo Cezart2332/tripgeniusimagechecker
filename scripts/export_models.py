@@ -18,9 +18,6 @@ MODEL_ID = "unitary/multilingual-toxic-xlm-roberta"
 OUT_DIR = Path(__file__).resolve().parent.parent / "models" / "text_onnx"
 
 HUB_FILES = (
-    "sentencepiece.bpe.model",
-    "tokenizer_config.json",
-    "special_tokens_map.json",
     "config.json",
 )
 
@@ -32,15 +29,19 @@ ONNX_ARTIFACTS = (
 
 
 def export_tokenizer_assets(out_dir: Path) -> None:
+    from transformers import AutoTokenizer
+
     for filename in HUB_FILES:
         downloaded = hf_hub_download(repo_id=MODEL_ID, filename=filename)
         shutil.copy2(downloaded, out_dir / filename)
         print(f"Copied {filename}")
 
-    if not (out_dir / "sentencepiece.bpe.model").exists():
-        raise RuntimeError(
-            f"sentencepiece.bpe.model missing in {out_dir}. Cannot run text moderation."
-        )
+    print("Exporting tokenizer.json (must match HF XLM-RoBERTa encoding) ...")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    tokenizer.save_pretrained(out_dir)
+
+    if not (out_dir / "tokenizer.json").exists():
+        raise RuntimeError(f"tokenizer.json missing in {out_dir}. Cannot run text moderation.")
 
 
 def _copy_onnx_artifacts(src_dir: Path, dest_dir: Path) -> None:

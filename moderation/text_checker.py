@@ -9,19 +9,19 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
-import sentencepiece as spm
+from tokenizers import Tokenizer
 
 from moderation.config import (
     SHORT_TEXT_LEN,
     SHORT_TEXT_TOXIC_THRESHOLD,
     TEXT_MAX_CHARS,
+    TEXT_MAX_TOKENS,
     TEXT_MODEL_DIR,
     TOXIC_LABELS,
     TOXIC_THRESHOLD,
 )
 
-_sp_processor: spm.SentencePieceProcessor | None = None
-_token_config: dict[str, Any] | None = None
+_tokenizer: Tokenizer | None = None
 _session: ort.InferenceSession | None = None
 _id2label: dict[int, str] | None = None
 _load_lock = threading.Lock()
@@ -31,7 +31,7 @@ _ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\ufeff]")
 
 
 def is_text_ready() -> bool:
-    return _session is not None
+    return _session is not None and _tokenizer is not None
 
 
 def text_load_error() -> str | None:
@@ -65,42 +65,32 @@ def _load_id2label(model_dir: Path) -> dict[int, str]:
     return {int(key): str(value) for key, value in raw.items()}
 
 
-def _load_tokenizer_config(model_dir: Path) -> dict[str, Any]:
-    config_path = model_dir / "tokenizer_config.json"
-    if not config_path.exists():
-        return {"bos_token_id": 0, "pad_token_id": 1, "eos_token_id": 2}
-    with config_path.open(encoding="utf-8") as handle:
-        return json.load(handle)
+def _load_tokenizer(model_dir: Path) -> Tokenizer:
+    tokenizer_path = model_dir / "tokenizer.json"
+    if not tokenizer_path.exists():
+        raise FileNotFoundError(
+            f"tokenizer.json not found at {tokenizer_path}. "
+            "Rebuild the image (scripts/export_models.py exports the HF tokenizer)."
+        )
+
+    tokenizer = Tokenizer.from_file(str(tokenizer_path))
+    tokenizer.enable_truncation(max_length=TEXT_MAX_TOKENS)
+    tokenizer.enable_padding(length=TEXT_MAX_TOKENS)
+    return tokenizer
 
 
-def _encode_text(text: str, max_length: int) -> tuple[list[int], list[int]]:
-    assert _sp_processor is not None
-    assert _token_config is not None
-
-    bos_id = int(_token_config.get("bos_token_id", 0))
-    pad_id = int(_token_config.get("pad_token_id", 1))
-    eos_id = int(_token_config.get("eos_token_id", 2))
-
-    body_ids = _sp_processor.encode(text, out_type=int)
-    max_body = max(1, max_length - 2)
-    body_ids = body_ids[:max_body]
-
-    input_ids = [bos_id, *body_ids, eos_id]
-    attention_mask = [1] * len(input_ids)
-
-    while len(input_ids) < max_length:
-        input_ids.append(pad_id)
-        attention_mask.append(0)
-
-    return input_ids, attention_mask
+def _encode_text(text: str) -> tuple[list[int], list[int]]:
+    assert _tokenizer is not None
+    encoded = _tokenizer.encode(text)
+    return encoded.ids, encoded.attention_mask
 
 
 def _ensure_text_session() -> None:
-    global _sp_processor, _token_config, _session, _id2label, _load_error
-    if _session is not None:
+    global _tokenizer, _session, _id2label, _load_error
+    if _session is not None and _tokenizer is not None:
         return
     with _load_lock:
-        if _session is not None:
+        if _session is not None and _tokenizer is not None:
             return
         try:
             if not TEXT_MODEL_DIR.exists():
@@ -109,16 +99,8 @@ def _ensure_text_session() -> None:
                     "Run scripts/export_models.py first."
                 )
 
-            spm_path = TEXT_MODEL_DIR / "sentencepiece.bpe.model"
-            if not spm_path.exists():
-                raise FileNotFoundError(f"sentencepiece.bpe.model not found at {spm_path}")
-
-            processor = spm.SentencePieceProcessor()
-            processor.load(str(spm_path))
-
             onnx_path = _resolve_onnx_path(TEXT_MODEL_DIR)
-            _sp_processor = processor
-            _token_config = _load_tokenizer_config(TEXT_MODEL_DIR)
+            _tokenizer = _load_tokenizer(TEXT_MODEL_DIR)
             _session = ort.InferenceSession(
                 str(onnx_path),
                 providers=["CPUExecutionProvider"],
@@ -189,7 +171,7 @@ def check_text(text: str) -> tuple[bool, dict[str, float]]:
 
     assert _session is not None
 
-    input_ids, attention_mask = _encode_text(truncated, TEXT_MAX_CHARS)
+    input_ids, attention_mask = _encode_text(truncated)
     logits = _session.run(None, _build_feeds(input_ids, attention_mask))[0][0]
     label_map = _id2label if _id2label else {0: "toxic"}
     scores = _scores_from_logits(logits, label_map)
